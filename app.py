@@ -1,39 +1,36 @@
 from flask import Flask, request, jsonify
-import json
-import os
-from datetime import datetime
+import sys
 
 app = Flask(__name__)
 
-# In-memory storage for quick testing (or use a file or external DB like MongoDB Atlas for persistence)
-webhook_storage = []
-
-@app.route('/', methods=['GET'])
-def home():
-    return "Webhook Receiver is Running!"
-
+# ✅ Webhook route for Language Cloud
 @app.route('/webhook/languagecloud', methods=['POST'])
-def receive_webhook():
+def languagecloud_webhook():
     try:
-        payload = request.json
-        payload['received_at'] = datetime.utcnow().isoformat()
-        webhook_storage.append(payload)  # Save in memory for now
+        data = request.get_json(force=True)
+        print("✅ Received webhook at /webhook/languagecloud")
+        print("Headers:", dict(request.headers))
+        print("Body:", data)
+        sys.stdout.flush()
 
-        # (Optional) Save to file for temporary persistence
-        with open("webhooks.json", "a") as f:
-            f.write(json.dumps(payload) + "\n")
+        # You can now add MongoDB logic or other processing here
 
-        print("Received webhook:", payload)
-        return jsonify({"status": "received"}), 200
-
+        return jsonify({"status": "success"}), 200
     except Exception as e:
-        print("Error:", str(e))
-        return jsonify({"error": str(e)}), 500
+        print("❌ Error handling webhook:", str(e))
+        sys.stdout.flush()
+        return jsonify({"error": str(e)}), 400
 
-@app.route('/webhook/export', methods=['GET'])
-def export_webhooks():
-    return jsonify(webhook_storage)
+# ✅ Catch-all for debugging unexpected routes
+@app.route('/', methods=['GET', 'POST'])
+@app.route('/<path:path>', methods=['GET', 'POST'])
+def catch_all(path=''):
+    print(f"⚠️  Request to unknown path: /{path}")
+    print("Headers:", dict(request.headers))
+    print("Body:", request.get_data(as_text=True))
+    sys.stdout.flush()
+    return "Catch-all OK", 200
 
+# ✅ Start server with debug logging
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(debug=True, host='0.0.0.0', port=10000)
