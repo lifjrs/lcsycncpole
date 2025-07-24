@@ -1,40 +1,60 @@
 from flask import Flask, request, jsonify
-import sys
+from datetime import datetime
+import json
+import os
 
 app = Flask(__name__)
 
-# ✅ Webhook route for Language Cloud
-@app.route('/webhook/languagecloud', methods=['POST'])
-def languagecloud_webhook():
+# Optional: store events in memory (reset on restart)
+event_log = []
+
+# Or: persist to file (append-only)
+DATA_FILE = "webhook_events.jsonl"
+
+@app.route("/webhook/languagecloud", methods=["POST"])
+def receive_webhook():
     try:
-        data = request.get_json(force=True)
-        print("✅ Received webhook at /webhook/languagecloud")
-        print("Headers:", dict(request.headers))
-        print("Body:", data)
-        sys.stdout.flush()
+        data = request.json
+        if not data:
+            return "Invalid JSON", 400
 
-        # You can now add MongoDB logic or other processing here
+        print(f"[{datetime.now()}] 🔔 Webhook received: {data.get('eventType')}")
 
-        return jsonify({"status": "success"}), 200
+        # Save to in-memory list
+        event_log.append(data)
+
+        # Optionally: Append to file
+        with open(DATA_FILE, "a") as f:
+            f.write(json.dumps(data) + "\n")
+
+        return jsonify({"status": "received"}), 200
+
     except Exception as e:
-        print("❌ Error handling webhook:", str(e))
-        sys.stdout.flush()
-        return jsonify({"error": str(e)}), 400
+        print(f"❌ Error handling webhook: {e}")
+        return "Internal Server Error", 500
 
-# ✅ Catch-all for debugging unexpected routes
-@app.route('/', methods=['GET', 'POST'])
-@app.route('/<path:path>', methods=['GET', 'POST'])
-def catch_all(path=''):
-    print(f"⚠️  Request to unknown path: /{path}")
-    print("Headers:", dict(request.headers))
-    print("Body:", request.get_data(as_text=True))
-    sys.stdout.flush()
-    return "Catch-all OK", 200
 
-# ✅ Start server with debug logging
-import os
+@app.route("/webhook/export", methods=["GET"])
+def export_webhook_data():
+    events = []
 
-if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 10000))
-    app.run(debug=True, host='0.0.0.0', port=port)
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, "r") as f:
+            for line in f:
+                try:
+                    events.append(json.loads(line.strip()))
+                except json.JSONDecodeError:
+                    continue
+    else:
+        events = event_log  # fallback to memory
 
+    return jsonify(events), 200
+
+
+@app.route("/", methods=["GET"])
+def health_check():
+    return "✅ Webhook server is running", 200
+
+
+if __name__ == "__main__":
+    app.run(debug=True)
