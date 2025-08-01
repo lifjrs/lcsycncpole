@@ -5,11 +5,8 @@ import os
 
 app = Flask(__name__)
 
-# Optional: store events in memory (reset on restart)
+# In-memory store for webhook events
 event_log = []
-
-# Or: persist to file (append-only)
-DATA_FILE = "webhook_events.jsonl"
 
 @app.route("/webhook/languagecloud", methods=["POST"])
 def receive_webhook():
@@ -20,12 +17,8 @@ def receive_webhook():
 
         print(f"[{datetime.now()}] 🔔 Webhook received: {data.get('eventType')}")
 
-        # Save to in-memory list
+        # Add event to memory
         event_log.append(data)
-
-        # Optionally: Append to file
-        with open(DATA_FILE, "a") as f:
-            f.write(json.dumps(data) + "\n")
 
         return jsonify({"status": "received"}), 200
 
@@ -36,19 +29,18 @@ def receive_webhook():
 
 @app.route("/webhook/export", methods=["GET"])
 def export_webhook_data():
-    events = []
+    if not event_log:
+        return "No events received yet.", 200
 
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r") as f:
-            for line in f:
-                try:
-                    events.append(json.loads(line.strip()))
-                except json.JSONDecodeError:
-                    continue
-    else:
-        events = event_log  # fallback to memory
+    print("\n📋 === Webhook Events Summary ===")
+    for idx, event in enumerate(event_log, start=1):
+        print(f"\nEvent #{idx}")
+        print(f"  Event Type : {event.get('eventType')}")
+        print(f"  Timestamp  : {event.get('timestamp', 'N/A')}")
+        print(f"  Project ID : {event.get('projectId', 'N/A')}")
+        print(f"  Full Event : {json.dumps(event, indent=2)}")
 
-    return jsonify(events), 200
+    return "✅ Events printed to console.", 200
 
 
 @app.route("/", methods=["GET"])
