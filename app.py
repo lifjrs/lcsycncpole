@@ -2,22 +2,27 @@ from flask import Flask, request, jsonify
 from datetime import datetime
 import json
 import os
+import re
 
 app = Flask(__name__)
 
-# In-memory store for webhook events
 event_log = []
 
 @app.route("/webhook/languagecloud", methods=["POST"])
 def receive_webhook():
     try:
-        data = request.json
-        if not data:
-            return "Invalid JSON", 400
+        raw_data = request.data.decode("utf-8", errors="replace")
+
+        # Replace null characters which break json.loads
+        cleaned_data = raw_data.replace("\x00", "")
+
+        try:
+            data = json.loads(cleaned_data)
+        except json.JSONDecodeError as e:
+            print(f"❌ JSON decode error: {e}")
+            return "Malformed JSON", 400
 
         print(f"[{datetime.now()}] 🔔 Webhook received: {data.get('eventType')}")
-
-        # Add event to memory
         event_log.append(data)
 
         return jsonify({"status": "received"}), 200
@@ -37,8 +42,11 @@ def export_webhook_data():
         print(f"\nEvent #{idx}")
         print(f"  Event Type : {event.get('eventType')}")
         print(f"  Timestamp  : {event.get('timestamp', 'N/A')}")
-        print(f"  Project ID : {event.get('projectId', 'N/A')}")
-        print(f"  Full Event : {json.dumps(event, indent=2)}")
+        print(f"  Project ID : {event.get('project', {}).get('id', 'N/A')}")
+        print(f"  Outcome    : {event.get('outcome', 'N/A')}")
+        print(f"  Task Type  : {event.get('taskType', {}).get('key', 'N/A')}")
+        print(f"  Error Code : {event.get('failedTask', {}).get('errors', [{}])[0].get('code', 'N/A')}")
+        print(f"  Error Value: {event.get('failedTask', {}).get('errors', [{}])[0].get('value', '')}")
 
     return "✅ Events printed to console.", 200
 
