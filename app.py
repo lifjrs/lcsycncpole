@@ -2,28 +2,30 @@ from flask import Flask, request, jsonify
 from datetime import datetime
 import json
 import os
-import re
 
 app = Flask(__name__)
 
+# Optional: store events in memory (reset on restart)
 event_log = []
+
+# Or: persist to file (append-only)
+DATA_FILE = "webhook_events.jsonl"
 
 @app.route("/webhook/languagecloud", methods=["POST"])
 def receive_webhook():
     try:
-        raw_data = request.data.decode("utf-8", errors="replace")
-
-        # Replace null characters which break json.loads
-        cleaned_data = raw_data.replace("\x00", "")
-
-        try:
-            data = json.loads(cleaned_data)
-        except json.JSONDecodeError as e:
-            print(f"❌ JSON decode error: {e}")
-            return "Malformed JSON", 400
+        data = request.json
+        if not data:
+            return "Invalid JSON", 400
 
         print(f"[{datetime.now()}] 🔔 Webhook received: {data.get('eventType')}")
+
+        # Save to in-memory list
         event_log.append(data)
+
+        # Optionally: Append to file
+        with open(DATA_FILE, "a") as f:
+            f.write(json.dumps(data) + "\n")
 
         return jsonify({"status": "received"}), 200
 
@@ -34,21 +36,19 @@ def receive_webhook():
 
 @app.route("/webhook/export", methods=["GET"])
 def export_webhook_data():
-    if not event_log:
-        return "No events received yet.", 200
+    events = []
 
-    print("\n📋 === Webhook Events Summary ===")
-    for idx, event in enumerate(event_log, start=1):
-        print(f"\nEvent #{idx}")
-        print(f"  Event Type : {event.get('eventType')}")
-        print(f"  Timestamp  : {event.get('timestamp', 'N/A')}")
-        print(f"  Project ID : {event.get('project', {}).get('id', 'N/A')}")
-        print(f"  Outcome    : {event.get('outcome', 'N/A')}")
-        print(f"  Task Type  : {event.get('taskType', {}).get('key', 'N/A')}")
-        print(f"  Error Code : {event.get('failedTask', {}).get('errors', [{}])[0].get('code', 'N/A')}")
-        print(f"  Error Value: {event.get('failedTask', {}).get('errors', [{}])[0].get('value', '')}")
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, "r") as f:
+            for line in f:
+                try:
+                    events.append(json.loads(line.strip()))
+                except json.JSONDecodeError:
+                    continue
+    else:
+        events = event_log  # fallback to memory
 
-    return "✅ Events printed to console.", 200
+    return jsonify(events), 200
 
 
 @app.route("/", methods=["GET"])
