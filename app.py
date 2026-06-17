@@ -74,39 +74,33 @@ def receive_webhook():
 
 
 @app.route("/webhook/export", methods=["GET"])
+@app.route("/webhook/export", methods=["GET"])
 def export_webhook_data():
-    """
-    Returns all stored webhook events as a JSON array.
 
-    Reads line-by-line so a single corrupt line doesn't break the whole export.
-    Skips and logs any malformed lines rather than crashing.
-    """
-    events = []
-
-    if not os.path.exists(DATA_FILE):
-        logger.info("Export called but no data file exists yet.")
-        return jsonify([]), 200
+    temp_file = f"{DATA_FILE}.processing"
 
     with _file_lock:
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
-            lines = f.readlines()
+        if not os.path.exists(DATA_FILE):
+            return jsonify([]), 200
 
-    skipped = 0
-    for i, line in enumerate(lines, start=1):
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            events.append(json.loads(line))
-        except json.JSONDecodeError:
-            logger.warning("Skipped malformed line %d in %s", i, DATA_FILE)
-            skipped += 1
+        os.rename(DATA_FILE, temp_file)
 
-    if skipped:
-        logger.warning("Export completed with %d skipped malformed line(s).", skipped)
+        # create fresh file immediately
+        open(DATA_FILE, "a").close()
 
-    logger.info("Export serving %d event(s).", len(events))
-    return jsonify(events), 200
+    events = []
+
+    with open(temp_file, "r", encoding="utf-8") as f:
+        for line in f:
+            try:
+                events.append(json.loads(line))
+            except:
+                pass
+
+    os.remove(temp_file)
+
+    logger.info("Exported %d events", len(events))
+    return jsonify(events)
 
 
 @app.route("/", methods=["GET"])
