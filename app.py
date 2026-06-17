@@ -74,7 +74,6 @@ def receive_webhook():
 
 
 @app.route("/webhook/export", methods=["GET"])
-@app.route("/webhook/export", methods=["GET"])
 def export_webhook_data():
 
     temp_file = f"{DATA_FILE}.processing"
